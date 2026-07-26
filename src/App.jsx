@@ -13,11 +13,18 @@ import { translateVegetableName } from './utils/common';
 
 function App() {
   const { state, actions } = useAppState();
+
+  // Service instances persistent across renders (harus dideklarasikan paling atas)
+  const cameraServiceRef = useRef(new CameraService());
+  const detectionServiceRef = useRef(new DetectionService());
+  const rootFactsServiceRef = useRef(new RootFactsService());
+
   const detectionCleanupRef = useRef(null);
   const isRunningRef = useRef(false);
   const isPredictingRef = useRef(false);
   const lastVegetableRef = useRef(null);
   const requestSeqRef = useRef(0);
+  const [currentTone, setCurrentTone] = useState('normal');
 
   // Generate fun fact helper dengan proteksi race condition (sequence ID)
   const generateFunFactForVegetable = useCallback(async (vegRawLabel) => {
