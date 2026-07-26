@@ -1,6 +1,6 @@
 import { pipeline, env } from '@huggingface/transformers';
 import { TONE_CONFIG } from '../utils/config.js';
-import { getIndonesianFunFact, translateVegetableName } from '../utils/common.js';
+import { VEGETABLE_ALIASES } from '../utils/common.js';
 
 // Configure transformers environment for browser cache & webgpu/wasm execution
 env.allowLocalModels = false;
@@ -49,31 +49,29 @@ export class RootFactsService {
     }
   }
 
-  // Generate prompt terarah secara dinamis sesuai nama sayuran dan tone
+  // Prompt utama sesuai rekomendasi resmi reviewer Dicoding:
+  // "describe vegetable ${vegetable} in ${tone} way with one sentence"
   getPrompt(vegetableName) {
-    const name = translateVegetableName(vegetableName);
-    switch (this.currentTone) {
-    case 'funny':
-      return `Write one short, playful, and funny fun fact about ${name}. Keep it under 2 sentences.`;
-    case 'professional':
-      return `Write one concise, educational, and scientific fact about ${name}. Keep it under 2 sentences.`;
-    case 'casual':
-      return `Write one short, friendly, and simple fun fact about ${name}. Keep it under 2 sentences.`;
-    case 'normal':
-    default:
-      return `Write one short, interesting factual fun fact about ${name}. Keep it under 2 sentences.`;
-    }
+    const canonicalName = vegetableName || 'vegetable';
+    const toneStyle = this.currentTone || 'normal';
+    return `describe vegetable ${canonicalName} in ${toneStyle} way with one sentence`;
   }
 
-  // Validasi output Generative AI untuk menyaring teks yang tidak relevan/refusal
+  // Prompt retry yang lebih ketat jika generasi pertama gagal validasi
+  getRetryPrompt(vegetableName) {
+    const canonicalName = vegetableName || 'vegetable';
+    return `write exactly one factual sentence about vegetable ${canonicalName}`;
+  }
+
+  // Validasi relevansi & integritas output Generative AI
   validateFactOutput(text, vegetableName) {
     if (!text || typeof text !== 'string') return false;
     const clean = text.trim();
-    if (clean.length < 15) return false;
+    if (clean.length < 12) return false;
 
     const lower = clean.toLowerCase();
 
-    // Saring boilerplate refusal atau model disclaimers
+    // 1. Saring frasa refusal / disclaimers AI
     const refusalPatterns = [
       'cannot perform',
       'against my programming',
@@ -82,7 +80,9 @@ export class RootFactsService {
       'as an ai',
       'i am an ai',
       'i cannot',
-      'write one short',
+      'i can\'t',
+      'unable to',
+      'describe vegetable',
       'tuliskan fakta'
     ];
 
@@ -92,45 +92,85 @@ export class RootFactsService {
       }
     }
 
+    // 2. Saring pengulangan prompt persis
+    if (lower.startsWith('describe vegetable') || lower.startsWith('write exactly one')) {
+      return false;
+    }
+
+    // 3. Relevance check: Periksa apakah output berkaitan dengan objek sayuran yang dideteksi
+    const vegKey = vegetableName.toLowerCase().trim();
+    const aliases = VEGETABLE_ALIASES[vegKey] || [vegKey, 'vegetable', 'plant', 'food'];
+
+    const hasRelevance = aliases.some((alias) => lower.includes(alias.toLowerCase()));
+    if (!hasRelevance) {
+      console.warn(`⚠️ Relevance validation failed for "${vegetableName}". Text: "${clean}"`);
+      return false;
+    }
+
     return true;
   }
 
-  // Lakukan generasi fakta menarik secara dinamis
+  // Lakukan generasi fakta menarik secara dinamis menggunakan Transformers.js
   async generateFacts(vegetableName) {
-    const indonesianFallback = getIndonesianFunFact(vegetableName, this.currentTone);
+    if (!this.isReady()) {
+      return null;
+    }
 
     if (this.isGenerating) {
-      return indonesianFallback;
+      return null;
     }
 
     this.isGenerating = true;
+
+    // Generation parameters sesuai petunjuk resmi reviewer Dicoding:
+    // temperature: 0.1, top_p: 0.9, do_sample: false, max_new_tokens: 50
+    const genParams = {
+      max_new_tokens: 50,
+      temperature: 0.1,
+      top_p: 0.9,
+      do_sample: false
+    };
+
     try {
-      if (this.isReady()) {
-        const prompt = this.getPrompt(vegetableName);
-        console.log(`🤖 Generating facts for "${vegetableName}" with tone "${this.currentTone}"...`);
+      // --- GENERATION 1 ---
+      const prompt1 = this.getPrompt(vegetableName);
+      console.log(`🤖 [Gen 1] Prompt for "${vegetableName}" (${this.currentTone}): "${prompt1}"`);
 
-        const result = await this.generator(prompt, {
-          max_new_tokens: 60,
-          temperature: 0.6,
-          top_p: 0.9,
-          do_sample: true
-        });
+      const result1 = await this.generator(prompt1, genParams);
 
-        if (Array.isArray(result) && result[0] && result[0].generated_text) {
-          const rawText = result[0].generated_text.trim();
-          if (this.validateFactOutput(rawText, vegetableName)) {
-            this.isGenerating = false;
-            return rawText;
-          }
+      if (Array.isArray(result1) && result1[0] && result1[0].generated_text) {
+        const text1 = result1[0].generated_text.trim();
+        if (this.validateFactOutput(text1, vegetableName)) {
+          console.log(`✅ [Gen 1] Valid output for "${vegetableName}": "${text1}"`);
+          this.isGenerating = false;
+          return text1;
         }
       }
-    } catch (error) {
-      console.warn('⚠️ Generative AI error, fallback ke fakta terverifikasi:', error);
-    } finally {
-      this.isGenerating = false;
-    }
 
-    return indonesianFallback;
+      // --- AUTOMATIC RETRY 1 (Prompt lebih ketat) ---
+      console.warn(`⚠️ [Gen 1] Invalid/off-topic output for "${vegetableName}". Executing automatic retry...`);
+      const retryPrompt = this.getRetryPrompt(vegetableName);
+      console.log(`🤖 [Retry 1] Prompt: "${retryPrompt}"`);
+
+      const result2 = await this.generator(retryPrompt, genParams);
+
+      if (Array.isArray(result2) && result2[0] && result2[0].generated_text) {
+        const text2 = result2[0].generated_text.trim();
+        if (this.validateFactOutput(text2, vegetableName)) {
+          console.log(`✅ [Retry 1] Valid output for "${vegetableName}": "${text2}"`);
+          this.isGenerating = false;
+          return text2;
+        }
+      }
+
+      console.error(`❌ Both Generation 1 and Retry 1 failed validation for "${vegetableName}".`);
+      this.isGenerating = false;
+      return null;
+    } catch (error) {
+      console.error('❌ Error during Transformers.js fact generation:', error);
+      this.isGenerating = false;
+      return null;
+    }
   }
 
   // Periksa apakah model sudah dimuat dan siap digunakan

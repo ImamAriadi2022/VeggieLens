@@ -53,6 +53,27 @@ export const translateVegetableName = (rawName) => {
   return INDONESIAN_VEGGIE_NAMES[key] || rawName;
 };
 
+export const VEGETABLE_ALIASES = {
+  beetroot: ['beetroot', 'beet', 'beets', 'root', 'red', 'nitrate', 'vegetable', 'plant'],
+  paprika: ['paprika', 'pepper', 'peppers', 'bell', 'capsicum', 'vitamin', 'vegetable', 'plant'],
+  cabbage: ['cabbage', 'cabbages', 'brassica', 'leaf', 'leaves', 'head', 'vegetable', 'plant'],
+  carrot: ['carrot', 'carrots', 'beta-carotene', 'carotene', 'vitamin a', 'orange', 'root', 'vegetable', 'plant'],
+  cauliflower: ['cauliflower', 'floret', 'florets', 'brassica', 'head', 'white', 'vegetable', 'plant'],
+  chilli: ['chilli', 'chillies', 'chili', 'chilies', 'pepper', 'capsaicin', 'spicy', 'spice', 'vegetable', 'plant'],
+  corn: ['corn', 'maize', 'kernel', 'kernels', 'cob', 'cobs', 'yellow', 'grain', 'vegetable', 'plant'],
+  cucumber: ['cucumber', 'cucumbers', 'water', 'hydration', 'skin', 'cucumis', 'vegetable', 'plant'],
+  eggplant: ['eggplant', 'eggplants', 'aubergine', 'purple', 'nasunin', 'berry', 'vegetable', 'plant'],
+  garlic: ['garlic', 'clove', 'cloves', 'allicin', 'allium', 'bulb', 'spice', 'vegetable', 'plant'],
+  ginger: ['ginger', 'rhizome', 'root', 'gingerol', 'spicy', 'tea', 'spice', 'vegetable', 'plant'],
+  lettuce: ['lettuce', 'salads', 'salad', 'leaf', 'leaves', 'lactuca', 'green', 'vegetable', 'plant'],
+  onion: ['onion', 'onions', 'allium', 'quercetin', 'bulb', 'layer', 'layers', 'vegetable', 'plant'],
+  peas: ['peas', 'pea', 'pod', 'pods', 'green', 'protein', 'legume', 'legumes', 'vegetable', 'plant'],
+  potato: ['potato', 'potatoes', 'starch', 'tuber', 'tubers', 'potassium', 'spud', 'vegetable', 'plant'],
+  turnip: ['turnip', 'turnips', 'root', 'radish', 'brassica', 'tuber', 'vegetable', 'plant'],
+  soybean: ['soybean', 'soybeans', 'soy', 'bean', 'beans', 'tofu', 'tempeh', 'protein', 'legume', 'legumes', 'vegetable', 'plant'],
+  spinach: ['spinach', 'leaf', 'leaves', 'iron', 'popeye', 'green', 'folate', 'vegetable', 'plant']
+};
+
 export const INDONESIAN_FACTS_BY_TONE = {
   wortel: {
     normal: 'Wortel kaya akan beta-karoten yang diubah tubuh menjadi Vitamin A untuk menjaga kesehatan mata dan memperkuat daya tahan tubuh.',

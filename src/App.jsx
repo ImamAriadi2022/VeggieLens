@@ -17,34 +17,35 @@ function App() {
   const isRunningRef = useRef(false);
   const isPredictingRef = useRef(false);
   const lastVegetableRef = useRef(null);
-  const [currentTone, setCurrentTone] = useState('normal');
+  const requestSeqRef = useRef(0);
 
-  // Service instances persistent across renders
-  const cameraServiceRef = useRef(new CameraService());
-  const detectionServiceRef = useRef(new DetectionService());
-  const rootFactsServiceRef = useRef(new RootFactsService());
-
-  // Generate fun fact helper
-  const generateFunFactForVegetable = useCallback(async (vegName) => {
+  // Generate fun fact helper dengan proteksi race condition (sequence ID)
+  const generateFunFactForVegetable = useCallback(async (vegRawLabel) => {
+    const currentReqId = ++requestSeqRef.current;
     actions.setFunFactData(null);
     try {
-      const fact = await rootFactsServiceRef.current.generateFacts(vegName);
-      if (fact) {
-        actions.setFunFactData(fact);
-      } else {
-        const vegIndo = translateVegetableName(vegName);
-        actions.setFunFactData(`Fakta: Sayuran ${vegIndo} kaya akan vitamin, serat, dan nutrisi penting untuk kesehatan tubuh.`);
+      const fact = await rootFactsServiceRef.current.generateFacts(vegRawLabel);
+      // Race condition protection: Pastikan hanya request terbaru yang memperbarui UI
+      if (currentReqId === requestSeqRef.current) {
+        if (fact) {
+          actions.setFunFactData(fact);
+        } else {
+          actions.setFunFactData('error');
+        }
       }
     } catch (error) {
       console.error('❌ Fact generation error:', error);
-      actions.setFunFactData('error');
+      if (currentReqId === requestSeqRef.current) {
+        actions.setFunFactData('error');
+      }
     }
   }, [actions]);
 
   // Manual retry handler for fun fact generation
   const handleRetryFact = () => {
-    if (state.detectionResult && state.detectionResult.className) {
-      generateFunFactForVegetable(state.detectionResult.className);
+    if (state.detectionResult && (state.detectionResult.rawLabel || state.detectionResult.className)) {
+      const label = state.detectionResult.rawLabel || state.detectionResult.className;
+      generateFunFactForVegetable(label);
     }
   };
 
@@ -73,9 +74,11 @@ function App() {
             actions.setDetectionResult(result);
             actions.setAppState('result');
 
-            if (lastVegetableRef.current !== result.className) {
-              lastVegetableRef.current = result.className;
-              generateFunFactForVegetable(result.className);
+            // Gunakan canonical rawLabel untuk deduplikasi dan context AI
+            const currentRawLabel = result.rawLabel || result.className;
+            if (lastVegetableRef.current !== currentRawLabel) {
+              lastVegetableRef.current = currentRawLabel;
+              generateFunFactForVegetable(currentRawLabel);
             }
           }
         }
@@ -210,8 +213,9 @@ function App() {
   const handleToneChange = (newTone) => {
     setCurrentTone(newTone);
     rootFactsServiceRef.current.setTone(newTone);
-    if (state.detectionResult && state.detectionResult.className) {
-      generateFunFactForVegetable(state.detectionResult.className);
+    if (state.detectionResult && (state.detectionResult.rawLabel || state.detectionResult.className)) {
+      const label = state.detectionResult.rawLabel || state.detectionResult.className;
+      generateFunFactForVegetable(label);
     }
   };
 
