@@ -1,5 +1,6 @@
 import { pipeline, env } from '@huggingface/transformers';
 import { TONE_CONFIG } from '../utils/config.js';
+import { getIndonesianFunFact, translateVegetableName } from '../utils/common.js';
 
 // Configure transformers environment for browser cache & webgpu/wasm execution
 env.allowLocalModels = false;
@@ -16,7 +17,6 @@ export class RootFactsService {
   }
 
   // Muat model dan inisialisasi pipeline text2text-generation
-  // Implementasikan strategi Backend Adaptive
   async loadModel() {
     try {
       console.log('🔄 Memuat Transformers.js model (LaMini-Flan-T5-77M q4)...');
@@ -35,7 +35,6 @@ export class RootFactsService {
       return true;
     } catch (error) {
       console.warn('⚠️ Gagal memuat Transformers.js model secara lokal:', error);
-      // fallback status jika offline/terbatas
       this.isModelLoaded = false;
       throw error;
     }
@@ -50,58 +49,88 @@ export class RootFactsService {
     }
   }
 
-  // Generate prompt berdasarkan tone yang dipilih
+  // Generate prompt terarah secara dinamis sesuai nama sayuran dan tone
   getPrompt(vegetableName) {
-    const name = vegetableName || 'vegetables';
+    const name = translateVegetableName(vegetableName);
     switch (this.currentTone) {
     case 'funny':
-      return `Tell me a funny, silly, and entertaining fun fact about ${name}.`;
+      return `Write one short, playful, and funny fun fact about ${name}. Keep it under 2 sentences.`;
     case 'professional':
-      return `Provide a concise, scientific, and educational fact about ${name}.`;
+      return `Write one concise, educational, and scientific fact about ${name}. Keep it under 2 sentences.`;
     case 'casual':
-      return `Tell me a casual, simple, and friendly fun fact about ${name}.`;
+      return `Write one short, friendly, and simple fun fact about ${name}. Keep it under 2 sentences.`;
     case 'normal':
     default:
-      return `Tell me an interesting and unique fact about ${name}.`;
+      return `Write one short, interesting factual fun fact about ${name}. Keep it under 2 sentences.`;
     }
   }
 
-  // Lakukan prediksi pada elemen gambar/label yang diberikan dan kembalikan hasilnya
-  // Konfigurasikan parameter generasi berdasarkan kebutuhan (max_new_tokens <= 150)
-  async generateFacts(vegetableName) {
-    if (!this.isReady()) {
-      throw new Error('Generator AI belum siap.');
+  // Validasi output Generative AI untuk menyaring teks yang tidak relevan/refusal
+  validateFactOutput(text, vegetableName) {
+    if (!text || typeof text !== 'string') return false;
+    const clean = text.trim();
+    if (clean.length < 15) return false;
+
+    const lower = clean.toLowerCase();
+
+    // Saring boilerplate refusal atau model disclaimers
+    const refusalPatterns = [
+      'cannot perform',
+      'against my programming',
+      'propaganda',
+      'biased language',
+      'as an ai',
+      'i am an ai',
+      'i cannot',
+      'write one short',
+      'tuliskan fakta'
+    ];
+
+    for (const pattern of refusalPatterns) {
+      if (lower.includes(pattern)) {
+        return false;
+      }
     }
 
+    return true;
+  }
+
+  // Lakukan generasi fakta menarik secara dinamis
+  async generateFacts(vegetableName) {
+    const indonesianFallback = getIndonesianFunFact(vegetableName, this.currentTone);
+
     if (this.isGenerating) {
-      return null;
+      return indonesianFallback;
     }
 
     this.isGenerating = true;
     try {
-      const prompt = this.getPrompt(vegetableName);
-      console.log(`🤖 Generating facts for "${vegetableName}" with tone "${this.currentTone}"...`);
+      if (this.isReady()) {
+        const prompt = this.getPrompt(vegetableName);
+        console.log(`🤖 Generating facts for "${vegetableName}" with tone "${this.currentTone}"...`);
 
-      const result = await this.generator(prompt, {
-        max_new_tokens: 120,
-        temperature: 0.7,
-        top_p: 0.9,
-        do_sample: true
-      });
+        const result = await this.generator(prompt, {
+          max_new_tokens: 60,
+          temperature: 0.6,
+          top_p: 0.9,
+          do_sample: true
+        });
 
-      this.isGenerating = false;
-
-      if (Array.isArray(result) && result[0] && result[0].generated_text) {
-        const text = result[0].generated_text.trim();
-        return text;
+        if (Array.isArray(result) && result[0] && result[0].generated_text) {
+          const rawText = result[0].generated_text.trim();
+          if (this.validateFactOutput(rawText, vegetableName)) {
+            this.isGenerating = false;
+            return rawText;
+          }
+        }
       }
-
-      return `Fact: ${vegetableName} is full of vitamins and nutrients essential for health!`;
     } catch (error) {
+      console.warn('⚠️ Generative AI error, fallback ke fakta terverifikasi:', error);
+    } finally {
       this.isGenerating = false;
-      console.error('❌ Gagal menghasilkan fakta unik:', error);
-      throw error;
     }
+
+    return indonesianFallback;
   }
 
   // Periksa apakah model sudah dimuat dan siap digunakan

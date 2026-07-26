@@ -1,7 +1,9 @@
 import { useReducer, useMemo } from 'react';
 
 const initialState = {
-  appState: 'idle',
+  currentView: 'landing', // 'landing' | 'prepare' | 'scanner'
+  permissionState: 'idle', // 'idle' | 'prompting' | 'granted' | 'denied'
+  appState: 'idle', // 'idle' | 'analyzing' | 'result'
   isRunning: false,
   modelStatus: 'Memuat Model AI...',
   detectionResult: null,
@@ -15,6 +17,8 @@ const initialState = {
 };
 
 const ActionTypes = {
+  SET_CURRENT_VIEW: 'SET_CURRENT_VIEW',
+  SET_PERMISSION_STATE: 'SET_PERMISSION_STATE',
   SET_MODEL_STATUS: 'SET_MODEL_STATUS',
   SET_SERVICES: 'SET_SERVICES',
   SET_RUNNING: 'SET_RUNNING',
@@ -27,6 +31,12 @@ const ActionTypes = {
 
 function appReducer(state, action) {
   switch (action.type) {
+  case ActionTypes.SET_CURRENT_VIEW:
+    return { ...state, currentView: action.payload };
+
+  case ActionTypes.SET_PERMISSION_STATE:
+    return { ...state, permissionState: action.payload };
+
   case ActionTypes.SET_MODEL_STATUS:
     return { ...state, modelStatus: action.payload };
 
@@ -67,6 +77,12 @@ export function useAppState() {
 
   const actions = useMemo(
     () => ({
+      setCurrentView: (view) =>
+        dispatch({ type: ActionTypes.SET_CURRENT_VIEW, payload: view }),
+
+      setPermissionState: (permState) =>
+        dispatch({ type: ActionTypes.SET_PERMISSION_STATE, payload: permState }),
+
       setModelStatus: (status) =>
         dispatch({ type: ActionTypes.SET_MODEL_STATUS, payload: status }),
 

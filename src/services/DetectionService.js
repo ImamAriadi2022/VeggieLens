@@ -1,5 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgpu';
+import { translateVegetableName } from '../utils/common.js';
 
 export class DetectionService {
   constructor() {
@@ -102,8 +103,7 @@ export class DetectionService {
       }
 
       const rawLabel = this.labels[maxIndex] || 'Unknown';
-      // Format display label e.g., 'eggplant' -> 'Eggplant'
-      const className = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+      const className = translateVegetableName(rawLabel);
       const confidencePercentage = Math.round(maxScore * 100);
 
       return {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Camera, Mic, ScanLine } from 'lucide-react';
+import { Camera, Mic, ScanLine, Sliders } from 'lucide-react';
 import { TONE_CONFIG } from '../utils/config';
 
 function CameraSection({
@@ -36,7 +36,7 @@ function CameraSection({
   const handleCameraChange = (newCameraType) => {
     setCameraType(newCameraType);
     if (services.camera && services.camera.isActive()) {
-      services.camera.startCamera();
+      services.camera.startCamera(newCameraType);
     }
   };
 
@@ -53,10 +53,17 @@ function CameraSection({
 
   const isModelReady = modelStatus === 'Model AI Siap';
   const buttonDisabled = !isModelReady;
-  const buttonText = isRunning ? 'Stop Scan' : 'Mulai Scan';
+  const buttonText = isRunning ? 'Hentikan Scan' : 'Scan Lagi';
 
   return (
     <section className="camera-section" aria-label="Camera Feed and Controls">
+      <div className="workspace-header">
+        <h2 className="workspace-title">Kenali Sayuran</h2>
+        <p className="workspace-subtitle">
+          Arahkan kamera ke sayuran untuk mengidentifikasi dan mendapatkan fakta AI secara langsung.
+        </p>
+      </div>
+
       <div className="camera-container">
         <div className="camera-wrapper">
           <video
@@ -80,10 +87,13 @@ function CameraSection({
 
           {!isRunning && (
             <div className="camera-placeholder">
-              <Camera size={48} />
-              <p>Kamera tidak aktif</p>
+              <div className="camera-placeholder-icon">
+                <Camera size={44} />
+              </div>
+              <p className="placeholder-title">Kamera Dihentikan</p>
+              <p className="placeholder-desc">Klik tombol &quot;Scan Lagi&quot; di bawah untuk mengaktifkan kembali kamera.</p>
               {error && (
-                <p style={{ color: '#ef4444', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+                <p className="camera-error-text">
                   {error}
                 </p>
               )}
@@ -100,52 +110,67 @@ function CameraSection({
             aria-label={buttonText}
             style={{ opacity: buttonDisabled ? 0.6 : 1 }}
           >
-            <ScanLine size={24} />
+            <ScanLine size={20} />
+            <span>{buttonText}</span>
           </button>
         </div>
 
-        <div className="settings-bar">
-          <div className="setting-item">
-            <Camera size={16} />
-            <select
-              id="camera-select"
-              value={cameraType}
-              onChange={(e) => handleCameraChange(e.target.value)}
-              disabled={isRunning}
-            >
-              <option value="default">Belakang</option>
-              <option value="front">Depan</option>
-            </select>
-          </div>
+        <div className="settings-panel">
+          <h3 className="settings-title">Pengaturan</h3>
+          <div className="settings-grid">
+            <div className="setting-item">
+              <label htmlFor="camera-select" className="setting-label">
+                <Camera size={15} />
+                <span>Kamera</span>
+              </label>
+              <select
+                id="camera-select"
+                value={cameraType}
+                onChange={(e) => handleCameraChange(e.target.value)}
+                disabled={isRunning}
+              >
+                <option value="default">Kamera Belakang</option>
+                <option value="front">Kamera Depan</option>
+              </select>
+            </div>
 
-          <div className="setting-item fps-setting">
-            <span id="fps-label">{fps} FPS</span>
-            <input
-              id="fps-slider"
-              type="range"
-              min="5"
-              max="60"
-              step="5"
-              value={fps}
-              onChange={(e) => handleFpsChange(e.target.value)}
-              disabled={isRunning}
-            />
-          </div>
+            <div className="setting-item fps-setting">
+              <label htmlFor="fps-slider" className="setting-label">
+                <Sliders size={15} />
+                <span>Kecepatan (<span id="fps-label">{fps} FPS</span>)</span>
+              </label>
+              <div className="slider-wrapper">
+                <input
+                  id="fps-slider"
+                  type="range"
+                  min="5"
+                  max="60"
+                  step="5"
+                  value={fps}
+                  onChange={(e) => handleFpsChange(e.target.value)}
+                  disabled={isRunning}
+                />
+              </div>
+            </div>
 
-          <div className="setting-item tone-setting">
-            <Mic size={16} />
-            <select
-              id="tone-select"
-              value={currentTone || 'normal'}
-              onChange={handleToneChange}
-              disabled={isRunning}
-            >
-              {TONE_CONFIG.availableTones.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="setting-item tone-setting">
+              <label htmlFor="tone-select" className="setting-label">
+                <Mic size={15} />
+                <span>Gaya Bahasa</span>
+              </label>
+              <select
+                id="tone-select"
+                value={currentTone || 'normal'}
+                onChange={handleToneChange}
+                disabled={isRunning}
+              >
+                {TONE_CONFIG.availableTones.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>

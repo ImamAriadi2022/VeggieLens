@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Header from './components/Header';
+import LandingPage from './components/LandingPage';
+import PreScanSection from './components/PreScanSection';
 import CameraSection from './components/CameraSection';
 import InfoPanel from './components/InfoPanel';
 import { useAppState } from './hooks/useAppState';
@@ -7,6 +9,7 @@ import { CameraService } from './services/CameraService';
 import { DetectionService } from './services/DetectionService';
 import { RootFactsService } from './services/RootFactsService';
 import { APP_CONFIG } from './utils/config';
+import { translateVegetableName } from './utils/common';
 
 function App() {
   const { state, actions } = useAppState();
@@ -25,21 +28,25 @@ function App() {
   const generateFunFactForVegetable = useCallback(async (vegName) => {
     actions.setFunFactData(null);
     try {
-      if (rootFactsServiceRef.current.isReady()) {
-        const fact = await rootFactsServiceRef.current.generateFacts(vegName);
-        if (fact) {
-          actions.setFunFactData(fact);
-        } else {
-          actions.setFunFactData(`Fact: ${vegName} is a delicious and healthy vegetable rich in nutrients!`);
-        }
+      const fact = await rootFactsServiceRef.current.generateFacts(vegName);
+      if (fact) {
+        actions.setFunFactData(fact);
       } else {
-        actions.setFunFactData(`Fact: ${vegName} is rich in vitamins, minerals, and antioxidants essential for health!`);
+        const vegIndo = translateVegetableName(vegName);
+        actions.setFunFactData(`Fakta: Sayuran ${vegIndo} kaya akan vitamin, serat, dan nutrisi penting untuk kesehatan tubuh.`);
       }
     } catch (error) {
       console.error('❌ Fact generation error:', error);
       actions.setFunFactData('error');
     }
   }, [actions]);
+
+  // Manual retry handler for fun fact generation
+  const handleRetryFact = () => {
+    if (state.detectionResult && state.detectionResult.className) {
+      generateFunFactForVegetable(state.detectionResult.className);
+    }
+  };
 
   // Loop deteksi utama terkontrol FPS
   const startDetectionLoop = useCallback(() => {
@@ -133,18 +140,57 @@ function App() {
     };
   }, [actions]);
 
-  // Fungsi untuk memulai dan menghentikan kamera
+  // User Flow Handlers
+  const handleStartFlow = () => {
+    actions.setError(null);
+    actions.setCurrentView('prepare');
+  };
+
+  const handleNavigateHome = () => {
+    // Comprehensive camera & loop cleanup when returning to landing
+    isRunningRef.current = false;
+    if (detectionCleanupRef.current) {
+      clearInterval(detectionCleanupRef.current);
+    }
+    cameraServiceRef.current.stopCamera();
+    actions.setRunning(false);
+    actions.resetResults();
+    lastVegetableRef.current = null;
+    actions.setPermissionState('idle');
+    actions.setCurrentView('landing');
+  };
+
+  const handleRequestPermission = async () => {
+    try {
+      actions.setError(null);
+      actions.setPermissionState('prompting');
+      await cameraServiceRef.current.startCamera('default');
+      actions.setPermissionState('granted');
+      actions.setCurrentView('scanner');
+      actions.setRunning(true);
+      actions.setAppState('analyzing');
+      isRunningRef.current = true;
+      startDetectionLoop();
+    } catch (err) {
+      console.error('❌ Gagal mendapatkan izin / mengaktifkan kamera:', err);
+      actions.setPermissionState('denied');
+      actions.setError('Akses kamera tidak diizinkan. Harap beri izin kamera pada browser Anda.');
+      actions.setRunning(false);
+    }
+  };
+
+  // Fungsi untuk mengontrol kamera di dalam Scanner Workspace
   const handleToggleCamera = async () => {
     if (state.isRunning) {
+      // Stop Scan: Hentikan kamera dan loop, tetapi TETAP berada di Scanner Workspace
       isRunningRef.current = false;
       if (detectionCleanupRef.current) {
         clearInterval(detectionCleanupRef.current);
       }
       cameraServiceRef.current.stopCamera();
       actions.setRunning(false);
-      actions.resetResults();
-      lastVegetableRef.current = null;
     } else {
+      // Scan Lagi: Aktifkan kembali kamera di dalam Scanner Workspace
       try {
         actions.setError(null);
         await cameraServiceRef.current.startCamera('default');
@@ -153,7 +199,7 @@ function App() {
         isRunningRef.current = true;
         startDetectionLoop();
       } catch (err) {
-        console.error('❌ Gagal mengaktifkan kamera:', err);
+        console.error('❌ Gagal mengaktifkan kamera kembali:', err);
         actions.setError(err.message || 'Gagal mengaktifkan kamera');
         actions.setRunning(false);
       }
@@ -182,34 +228,58 @@ function App() {
   };
 
   return (
-    <div className="app-container">
-      <Header modelStatus={state.modelStatus} />
+    <div className="app-layout">
+      <Header
+        modelStatus={state.modelStatus}
+        currentView={state.currentView}
+        onNavigateHome={handleNavigateHome}
+        onStartScan={handleStartFlow}
+      />
 
-      <main className="main-content">
-        <CameraSection
-          isRunning={state.isRunning}
-          onToggleCamera={handleToggleCamera}
-          onToneChange={handleToneChange}
-          services={state.services}
-          modelStatus={state.modelStatus}
-          error={state.error}
-          currentTone={currentTone}
-        />
+      <div className="app-container">
+        {state.currentView === 'landing' && (
+          <LandingPage onStart={handleStartFlow} />
+        )}
 
-        <InfoPanel
-          appState={state.appState}
-          detectionResult={state.detectionResult}
-          funFactData={state.funFactData}
-          error={state.error}
-          onCopyFact={handleCopyFact}
-        />
-      </main>
+        {state.currentView === 'prepare' && (
+          <PreScanSection
+            onRequestPermission={handleRequestPermission}
+            onBack={handleNavigateHome}
+            error={state.error}
+            permissionState={state.permissionState}
+            isModelReady={state.modelStatus === 'Model AI Siap'}
+          />
+        )}
 
-      <footer className="footer">
-        <p>VeggieLens &copy; 2026 &bull; See it. Know it.</p>
-      </footer>
+        {state.currentView === 'scanner' && (
+          <main className="main-content view-transition">
+            <CameraSection
+              isRunning={state.isRunning}
+              onToggleCamera={handleToggleCamera}
+              onToneChange={handleToneChange}
+              services={state.services}
+              modelStatus={state.modelStatus}
+              error={state.error}
+              currentTone={currentTone}
+            />
 
-      {state.error && (
+            <InfoPanel
+              appState={state.appState}
+              detectionResult={state.detectionResult}
+              funFactData={state.funFactData}
+              error={state.error}
+              onCopyFact={handleCopyFact}
+              onRetryFact={handleRetryFact}
+            />
+          </main>
+        )}
+
+        <footer className="footer">
+          <p>VeggieLens &copy; 2026 &bull; See it. Know it.</p>
+        </footer>
+      </div>
+
+      {state.error && state.currentView === 'scanner' && (
         <div style={{
           position: 'fixed',
           bottom: '1rem',
