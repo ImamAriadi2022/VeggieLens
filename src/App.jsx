@@ -150,6 +150,27 @@ function App() {
     };
   }, [actions]);
 
+  // Test sample image handler (allows scanning static test images or uploaded image files)
+  const handleScanSampleImage = useCallback(async (imageElement) => {
+    try {
+      actions.setError(null);
+      actions.setAppState('analyzing');
+      const result = await detectionServiceRef.current.predict(imageElement);
+      if (result && result.isValid) {
+        actions.setDetectionResult(result);
+        actions.setAppState('result');
+        const currentRawLabel = result.rawLabel || result.className;
+        lastVegetableRef.current = currentRawLabel;
+        generateFunFactForVegetable(currentRawLabel);
+      } else {
+        actions.setError('Gagal mendeteksi sayuran pada gambar sample');
+      }
+    } catch (err) {
+      console.error('❌ Error scanning sample image:', err);
+      actions.setError('Terjadi kesalahan saat memproses gambar');
+    }
+  }, [actions, generateFunFactForVegetable]);
+
   // User Flow Handlers
   const handleStartFlow = () => {
     actions.setError(null);
@@ -268,6 +289,7 @@ function App() {
               isRunning={state.isRunning}
               onToggleCamera={handleToggleCamera}
               onToneChange={handleToneChange}
+              onScanSampleImage={handleScanSampleImage}
               services={state.services}
               modelStatus={state.modelStatus}
               error={state.error}
